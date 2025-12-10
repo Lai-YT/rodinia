@@ -1,6 +1,6 @@
 include ../common.mk
 
-EXE  = gaussian
+EXE  = gaussian gaussian_surface
 
 .PHONY: all
 all: $(EXE)
