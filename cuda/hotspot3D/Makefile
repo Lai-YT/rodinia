@@ -1,6 +1,6 @@
 include ../common.mk
 
-EXE  = 3D
+EXE  = 3D 3D_texture
 
 .PHONY: all
 all: $(EXE)
