@@ -1,6 +1,6 @@
 include ../common.mk
 
-EXE  = pavle
+EXE  = pavle pavle_surface
 OBJS = cpuencode.o
 
 .PHONY: all
