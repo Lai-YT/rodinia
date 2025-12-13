@@ -13,14 +13,14 @@ __global__ void srad_cuda_1(float *E_C, float *W_C, float *N_C, float *S_C,
     int tx = threadIdx.x;
     int ty = threadIdx.y;
 
-    // indices
-    int index = cols * BLOCK_SIZE * by + BLOCK_SIZE * bx + cols * ty + tx;
-    int index_n = cols * BLOCK_SIZE * by + BLOCK_SIZE * bx + tx - cols;
-    int index_s =
-        cols * BLOCK_SIZE * by + BLOCK_SIZE * bx + cols * BLOCK_SIZE + tx;
-    int index_w = cols * BLOCK_SIZE * by + BLOCK_SIZE * bx + cols * ty - 1;
-    int index_e =
-        cols * BLOCK_SIZE * by + BLOCK_SIZE * bx + cols * ty + BLOCK_SIZE;
+    // compute global row/col and indices (safe)
+    int row = BLOCK_SIZE * by + ty;
+    int col = BLOCK_SIZE * bx + tx;
+    int index = row * cols + col;
+    int index_n = (row == 0) ? index : (row - 1) * cols + col;
+    int index_s = (row == rows - 1) ? index : (row + 1) * cols + col;
+    int index_w = (col == 0) ? index : row * cols + (col - 1);
+    int index_e = (col == cols - 1) ? index : row * cols + (col + 1);
 
     float n, w, e, s, jc, g2, l, num, den, qsqr, c;
 
@@ -155,12 +155,12 @@ __global__ void srad_cuda_2(float *E_C, float *W_C, float *N_C, float *S_C,
     int tx = threadIdx.x;
     int ty = threadIdx.y;
 
-    // indices
-    int index = cols * BLOCK_SIZE * by + BLOCK_SIZE * bx + cols * ty + tx;
-    int index_s =
-        cols * BLOCK_SIZE * by + BLOCK_SIZE * bx + cols * BLOCK_SIZE + tx;
-    int index_e =
-        cols * BLOCK_SIZE * by + BLOCK_SIZE * bx + cols * ty + BLOCK_SIZE;
+    // compute global row/col and indices (safe)
+    int row = BLOCK_SIZE * by + ty;
+    int col = BLOCK_SIZE * bx + tx;
+    int index = row * cols + col;
+    int index_s = (row == rows - 1) ? index : (row + 1) * cols + col;
+    int index_e = (col == cols - 1) ? index : row * cols + (col + 1);
     float cc, cn, cs, ce, cw, d_sum;
 
     // shared memory allocation
