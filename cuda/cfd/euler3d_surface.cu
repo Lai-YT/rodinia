@@ -8,8 +8,7 @@
 #include <iostream>
 #include <fstream>
 #include <stdlib.h>
-
-#include "texture.cuh"
+#include <texture.cuh>
 
 
 /*
@@ -74,7 +73,7 @@ size_t nbytes(int N) {
     return sizeof(T) * N;
 }
 
-void dump(wrap::cuda::SurfaceObject variables, int nel, int nelr) {
+void dump(wrap::cuda::SurfaceObject<float> variables, int nel, int nelr) {
     float *h_variables = new float[nelr * NVAR];
     checkCudaErrors(cudaMemcpy2DFromArray(
         h_variables, sizeof(float) * nelr,
@@ -138,7 +137,7 @@ void initialize_variables(int nelr, float *variables) {
     cuda_initialize_variables<<<Dg, Db>>>(nelr, variables);
     getLastCudaError("initialize_variables failed");
 }
-void initialize_variables(int nelr, wrap::cuda::SurfaceObject &variables) {
+void initialize_variables(int nelr, wrap::cuda::SurfaceObject<float> &variables) {
     dim3 Dg(nelr / BLOCK_SIZE), Db(BLOCK_SIZE);
     cuda_initialize_variables<<<Dg, Db>>>(nelr, variables.surf);
     getLastCudaError("initialize_variables failed");
@@ -214,7 +213,7 @@ __global__ void cuda_compute_step_factor(int nelr, cudaSurfaceObject_t variables
     step_factors[i] =
         float(0.5f) / (sqrtf(areas[i]) * (sqrtf(speed_sqd) + speed_of_sound));
 }
-void compute_step_factor(int nelr, wrap::cuda::SurfaceObject variables, float *areas,
+void compute_step_factor(int nelr, wrap::cuda::SurfaceObject<float> variables, float *areas,
                          float *step_factors) {
     dim3 Dg(nelr / BLOCK_SIZE), Db(BLOCK_SIZE);
     cuda_compute_step_factor<<<Dg, Db>>>(nelr, variables.surf, areas, step_factors);
@@ -413,7 +412,7 @@ __global__ void cuda_compute_flux(int nelr, int *elements_surrounding_elements,
     fluxes[i + VAR_DENSITY_ENERGY * nelr] = flux_i_density_energy;
 }
 void compute_flux(int nelr, int *elements_surrounding_elements, float *normals,
-                  wrap::cuda::SurfaceObject variables, float *fluxes) {
+                  wrap::cuda::SurfaceObject<float> variables, float *fluxes) {
     dim3 Dg(nelr / BLOCK_SIZE), Db(BLOCK_SIZE);
     cuda_compute_flux<<<Dg, Db>>>(nelr, elements_surrounding_elements, normals,
                                   variables.surf, fluxes);
@@ -443,7 +442,8 @@ __global__ void cuda_time_step(int j, int nelr, cudaSurfaceObject_t old_variable
     surf2Dwrite(old_momentum_z + factor * fluxes[i + (VAR_MOMENTUM + 2) * nelr],
                 variables, nbytes<float>(i), VAR_MOMENTUM + 2);
 }
-void time_step(int j, int nelr, wrap::cuda::SurfaceObject old_variables, wrap::cuda::SurfaceObject variables,
+void time_step(int j, int nelr, wrap::cuda::SurfaceObject<float> old_variables,
+               wrap::cuda::SurfaceObject<float> variables,
                float *step_factors, float *fluxes) {
     dim3 Dg(nelr / BLOCK_SIZE), Db(BLOCK_SIZE);
     cuda_time_step<<<Dg, Db>>>(j, nelr, old_variables.surf, variables.surf, step_factors,
@@ -604,11 +604,11 @@ int main(int argc, char **argv) {
     }
 
     // Create arrays and set initial conditions
-    wrap::cuda::SurfaceObject variables;
+    wrap::cuda::SurfaceObject<float> variables;
     wrap::cuda::malloc2DSurfaceObject(&variables, NELR, NVAR);
     initialize_variables(NELR, variables);
 
-    wrap::cuda::SurfaceObject old_variables;
+    wrap::cuda::SurfaceObject<float> old_variables;
     wrap::cuda::malloc2DSurfaceObject(&old_variables, NELR, NVAR);
     float *fluxes = alloc<float>(NELR * NVAR);
     float *step_factors = alloc<float>(NELR);

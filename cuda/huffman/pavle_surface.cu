@@ -26,7 +26,7 @@
 #include "cpuencode.h"
 #include "pack_kernels_surface.cu"
 #include "scan.cu"
-#include "texture.cuh"
+#include <texture.cuh>
 
 long long get_time() {
     struct timeval tv;

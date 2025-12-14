@@ -1,12 +1,11 @@
 #include <assert.h>
+#include <devintrin.cuh>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
+#include <texture.cuh>
 #include <time.h>
-
-#include "devintrin.cuh"
-#include "texture.cuh"
 
 #define BLOCK_SIZE 16
 #define STR_SIZE 256

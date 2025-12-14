@@ -18,8 +18,7 @@
 #include <cuda.h>
 #include <string.h>
 #include <math.h>
-
-#include "texture.cuh"
+#include <texture.cuh>
 
 #ifdef RD_WG_SIZE_0_0
 #define MAXBLOCKSIZE RD_WG_SIZE_0_0
@@ -344,7 +343,7 @@ __global__ void Fan2(cudaSurfaceObject_t m_cuda, cudaSurfaceObject_t a_cuda, flo
 void ForwardSub() {
     int t;
     float *b_cuda;
-    wrap::cuda::SurfaceObject m_cuda, a_cuda;
+    wrap::cuda::SurfaceObject<float> m_cuda, a_cuda;
 
     // allocate memory on GPU
     wrap::cuda::malloc2DSurfaceObject(&m_cuda, Size, Size);
