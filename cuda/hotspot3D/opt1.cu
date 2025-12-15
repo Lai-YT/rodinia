@@ -82,9 +82,11 @@ void hotspot_opt1(float *p, float *tIn, float *tOut, int nx, int ny, int nz,
         hotspotOpt1<<<grid_dim, block_dim>>>(p_d, tIn_d, tOut_d, stepDivCap, nx,
                                              ny, nz, ce, cw, cn, cs, ct, cb,
                                              cc);
-        float *t = tIn_d;
-        tIn_d = tOut_d;
-        tOut_d = t;
+        if (i != numiter - 1) {
+            float *t = tIn_d;
+            tIn_d = tOut_d;
+            tOut_d = t;
+        }
     }
     cudaDeviceSynchronize();
     long long stop = get_time();
