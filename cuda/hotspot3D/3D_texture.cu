@@ -21,11 +21,7 @@
 /* capacitance fitting factor	*/
 #define FACTOR_CHIP 0.5
 
-#define NROWS 512
-#define NCOLS 512
-#define NLAYS 8
-
-#include "opt1.cu"
+#include "opt1_texture.cu"
 
 /* chip parameters	*/
 float t_chip = 0.0005;
@@ -167,7 +163,6 @@ int main(int argc, char **argv) {
     int numCols = atoi(argv[1]);
     int numRows = atoi(argv[1]);
     int layers = atoi(argv[2]);
-    assert(numCols == NCOLS && numRows == NROWS && layers == NLAYS);
 
     /* calculating parameters*/
 

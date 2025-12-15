@@ -4,46 +4,67 @@ long long get_time() {
     return (tv.tv_sec * 1000000) + tv.tv_usec;
 }
 
-__global__ void hotspotOpt1(float (*p)[NCOLS],
+__global__ void hotspotOpt1(float *p,
                             cudaTextureObject_t tIn,
-                            float (*tOut)[NCOLS], float sdc,
+                            float *tOut, float sdc,
                             int nx, int ny, int nz, float ce, float cw,
                             float cn, float cs, float ct, float cb, float cc) {
-    float amb_temp = 80.0f;
+    float amb_temp = 80.0;
 
     int i = blockDim.x * blockIdx.x + threadIdx.x;
     int j = blockDim.y * blockIdx.y + threadIdx.y;
 
-    if (i >= nx || j >= ny)
-        return;
+    int c = i + j * nx;
+    int xy = nx * ny;
 
-    int x = i;
-    int y = j;
+    int W = (i == 0) ? c : c - 1;
+    int E = (i == nx - 1) ? c : c + 1;
+    int N = (j == 0) ? c : c - nx;
+    int S = (j == ny - 1) ? c : c + nx;
 
-    int W = (x == 0) ? x : x - 1;
-    int E = (x == nx - 1) ? x : x + 1;
+    auto fetch = [&](int idx) {
+        int tx = idx % nx;
+        int ty = idx / nx;
+        return wrap::ptx::tex2Ds32<float>(tIn, tx, ty);
+    };
 
-    for (int k = 0; k < nz; ++k) {
-        int row = k * ny + y; /* linearized z and y */
-        int row_north = (y == 0) ? row : row - 1;
-        int row_south = (y == ny - 1) ? row : row + 1;
+    float temp1, temp2, temp3;
+    temp1 = temp2 = fetch(c);
+    temp3 = fetch(c + xy);
 
-        float center = wrap::ptx::tex2Ds32<float>(tIn, x, row);
-        float left = wrap::ptx::tex2Ds32<float>(tIn, W, row);
-        float right = wrap::ptx::tex2Ds32<float>(tIn, E, row);
-        float north = wrap::ptx::tex2Ds32<float>(tIn, x, row_north);
-        float south = wrap::ptx::tex2Ds32<float>(tIn, x, row_south);
-        float bottom =
-            (k == 0) ? center : wrap::ptx::tex2Ds32<float>(tIn, x, row - ny);
-        float top =
-            (k == nz - 1)
-                ? center
-                : wrap::ptx::tex2Ds32<float>(tIn, x, row + ny);
+    /* first layer (k = 0) */
+    tOut[c] = cc * temp2 + cw * fetch(W) + ce * fetch(E) +
+              cs * fetch(S) + cn * fetch(N) + cb * temp1 + ct * temp3 +
+              sdc * p[c] + ct * amb_temp;
 
-        tOut[row][x] = cc * center + cw * left + ce * right + cs * south +
-                       cn * north + cb * bottom + ct * top + sdc * p[row][x] +
-                       ct * amb_temp;
+    c += xy;
+    W += xy;
+    E += xy;
+    N += xy;
+    S += xy;
+
+    for (int k = 1; k < nz - 1; ++k) {
+        temp1 = temp2;
+        temp2 = temp3;
+        temp3 = fetch(c + xy);
+
+        tOut[c] = cc * temp2 + cw * fetch(W) + ce * fetch(E) +
+                  cs * fetch(S) + cn * fetch(N) + cb * temp1 + ct * temp3 +
+                  sdc * p[c] + ct * amb_temp;
+
+        c += xy;
+        W += xy;
+        E += xy;
+        N += xy;
+        S += xy;
     }
+
+    /* last layer (k = nz-1) */
+    temp1 = temp2;
+    temp2 = temp3;
+    tOut[c] = cc * temp2 + cw * fetch(W) + ce * fetch(E) +
+              cs * fetch(S) + cn * fetch(N) + cb * temp1 + ct * temp3 +
+              sdc * p[c] + ct * amb_temp;
     return;
 }
 
@@ -62,7 +83,6 @@ void hotspot_opt1(float *p, float *tIn, float *tOut, int nx, int ny, int nz,
     float *tOut_d, *p_d;
     wrap::cuda::TextureObject<float> tIn_d;
     cudaMalloc((void **)&p_d, s);
-    cudaMalloc((void **)&tIn_d, s);
     wrap::cuda::malloc2DTextureObject(&tIn_d, nx, ny * nz);
     cudaMalloc((void **)&tOut_d, s);
     wrap::cuda::memcpy2DTextureObject(&tIn_d, tIn, nx, ny * nz);
@@ -74,17 +94,16 @@ void hotspot_opt1(float *p, float *tIn, float *tOut, int nx, int ny, int nz,
     dim3 grid_dim(nx / 64, ny / 4, 1);
 
     long long start = get_time();
-    assert(numiter == 1);
-    //for (int i = 0; i < numiter; ++i) {
-        hotspotOpt1<<<grid_dim, block_dim>>>(
-            (float (*)[NCOLS])p_d,
-            tIn_d.tex,
-            (float (*)[NCOLS])tOut_d,
-            stepDivCap, nx, ny, nz, ce, cw, cn, cs, ct, cb, cc);
-        //float *t = tIn_d;
-        //tIn_d = tOut_d;
-        //tOut_d = t;
-    //}
+    for (int i = 0; i < numiter; ++i) {
+        hotspotOpt1<<<grid_dim, block_dim>>>(p_d, tIn_d.tex, tOut_d, stepDivCap, nx,
+                                             ny, nz, ce, cw, cn, cs, ct, cb,
+                                             cc);
+        // if (i != numiter - 1) {
+        //     float *t = tIn_d;
+        //     tIn_d = tOut_d;
+        //     tOut_d = t;
+        // }
+    }
     cudaDeviceSynchronize();
     long long stop = get_time();
     float time = (float)((stop - start) / (1000.0 * 1000.0));
