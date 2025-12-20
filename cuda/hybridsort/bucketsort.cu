@@ -106,15 +106,34 @@ void bucketSort(float *d_input, float *d_output, int listsize, int *sizes,
                                (DIVISIONS) * sizeof(int),
                                cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemset((void *)d_offsets, 0, DIVISIONS * sizeof(int)));
-    checkCudaErrors(
-        cudaBindTexture(0, texPivot, l_pivotpoints, DIVISIONS * sizeof(int)));
+    // Create texture object for pivot points (linear memory)
+    cudaResourceDesc resDesc;
+    memset(&resDesc, 0, sizeof(resDesc));
+    resDesc.resType = cudaResourceTypeLinear;
+    resDesc.res.linear.devPtr = (void *)l_pivotpoints;
+    cudaChannelFormatDesc channelDesc =
+        cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindFloat);
+    resDesc.res.linear.desc = channelDesc;
+    resDesc.res.linear.sizeInBytes = DIVISIONS * sizeof(float);
+
+    cudaTextureDesc texDesc;
+    memset(&texDesc, 0, sizeof(texDesc));
+    texDesc.addressMode[0] = cudaAddressModeClamp;
+    texDesc.filterMode = cudaFilterModePoint;
+    texDesc.readMode = cudaReadModeElementType;
+    texDesc.normalizedCoords = 0;
+
+    cudaTextureObject_t texPivotObj = 0;
+    checkCudaErrors(cudaCreateTextureObject(&texPivotObj, &resDesc, &texDesc, NULL));
     // Setup block and grid
     dim3 threads(BUCKET_THREAD_N, 1);
     int blocks = ((listsize - 1) / (threads.x * BUCKET_BAND)) + 1;
     dim3 grid(blocks, 1);
     // Find the new indice for all elements
     bucketcount<<<grid, threads>>>(d_input, d_indice, d_prefixoffsets,
-                                   listsize);
+                                   listsize, texPivotObj);
+    checkCudaErrors(cudaDeviceSynchronize());
+    checkCudaErrors(cudaDestroyTextureObject(texPivotObj));
 ///////////////////////////////////////////////////////////////////////////
 // Prefix scan offsets and align each division to float4 (required by
 // mergesort)

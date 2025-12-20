@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <cuda_runtime.h>
 #include "common.cu"
 
 
@@ -20,6 +21,7 @@ struct QuerySet {
 
     // total device memory occupied by this query set
     size_t bytes_on_board;
+    cudaTextureObject_t qryTexObj;
 };
 
 
@@ -69,6 +71,9 @@ struct Reference {
 
     AuxiliaryNodeData *aux_data;
     int num_nodes;
+    cudaTextureObject_t refTexObj;
+    cudaTextureObject_t nodeTexObj;
+    cudaTextureObject_t childrenTexObj;
 };
 
 

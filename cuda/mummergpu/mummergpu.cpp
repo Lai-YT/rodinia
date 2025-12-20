@@ -3,9 +3,6 @@
 #include <fstream>
 #include <stdint.h>
 
-#define int2 int32_t
-#define ulong4 uint32_t
-#define uint4 uint32_t
 #include "mummergpu.h"
 
 char *OPT_reffilename = NULL;

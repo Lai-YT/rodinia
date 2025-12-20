@@ -431,12 +431,20 @@ void loadReferenceTexture(MatchContext *ctx) {
                                          ref->h_ref_array, numrows * ref->pitch,
                                          cudaMemcpyHostToDevice));
 
-        reftex.addressMode[0] = cudaAddressModeClamp;
-        reftex.addressMode[1] = cudaAddressModeClamp;
-        reftex.filterMode = cudaFilterModePoint;
-        reftex.normalized = false;
+        struct cudaResourceDesc resDesc;
+        memset(&resDesc, 0, sizeof(resDesc));
+        resDesc.resType = cudaResourceTypeArray;
+        resDesc.res.array.array = (cudaArray *)ref->d_ref_array;
 
-        BIND_TEX_ARRAY(reftex, (cudaArray *)ref->d_ref_array, refTextureDesc);
+        struct cudaTextureDesc texDesc;
+        memset(&texDesc, 0, sizeof(texDesc));
+        texDesc.addressMode[0] = cudaAddressModeClamp;
+        texDesc.addressMode[1] = cudaAddressModeClamp;
+        texDesc.filterMode = cudaFilterModePoint;
+        texDesc.readMode = cudaReadModeElementType;
+        texDesc.normalizedCoords = 0;
+
+        cudaCreateTextureObject(&ref->refTexObj, &resDesc, &texDesc, NULL);
 
         ctx->ref->bytes_on_board += numrows * ref->pitch;
 #else
@@ -445,12 +453,24 @@ void loadReferenceTexture(MatchContext *ctx) {
         CUDA_SAFE_CALL(cudaMemcpy((void *)(ref->d_ref_array), ref->str,
                                   ref->len, cudaMemcpyHostToDevice));
 
-        reftex.addressMode[0] = cudaAddressModeClamp;
-        reftex.filterMode = cudaFilterModePoint;
-        reftex.normalized = false; // access with normalized texture coordinates
         cudaChannelFormatDesc refDesc =
             cudaCreateChannelDesc(8, 0, 0, 0, cudaChannelFormatKindUnsigned);
-        BIND_TEX(0, reftex, (void *)(ref->d_ref_array), refDesc, ref->len);
+
+        struct cudaResourceDesc resDesc;
+        memset(&resDesc, 0, sizeof(resDesc));
+        resDesc.resType = cudaResourceTypeLinear;
+        resDesc.res.linear.devPtr = (void *)ref->d_ref_array;
+        resDesc.res.linear.desc = refDesc;
+        resDesc.res.linear.sizeInBytes = ref->len;
+
+        struct cudaTextureDesc texDesc;
+        memset(&texDesc, 0, sizeof(texDesc));
+        texDesc.addressMode[0] = cudaAddressModeClamp;
+        texDesc.filterMode = cudaFilterModePoint;
+        texDesc.readMode = cudaReadModeElementType;
+        texDesc.normalizedCoords = 0;
+
+        cudaCreateTextureObject(&ref->refTexObj, &resDesc, &texDesc, NULL);
 
         ctx->ref->bytes_on_board += ref->len;
 #endif
@@ -486,7 +506,7 @@ void loadReferenceTexture(MatchContext *ctx) {
 
 void unloadReferenceString(Reference *ref) {
 #if REFTEX
-    CUDA_SAFE_CALL(cudaUnbindTexture(reftex));
+    CUDA_SAFE_CALL(cudaDestroyTextureObject(ref->refTexObj));
 #endif
 
 #if REORDER_REF && REFTEX
@@ -504,7 +524,7 @@ void unloadReferenceTree(MatchContext *ctx) {
 #if REORDER_TREE
 // Unload nodetex
 #if NODETEX
-    CUDA_SAFE_CALL(cudaUnbindTexture(nodetex));
+    CUDA_SAFE_CALL(cudaDestroyTextureObject(ref->nodeTexObj));
     CUDA_SAFE_CALL(cudaFreeArray((cudaArray *)(ref->d_node_tex_array)));
 #else
     CUDA_SAFE_CALL(cudaFree(ref->d_node_tex_array));
@@ -514,7 +534,7 @@ void unloadReferenceTree(MatchContext *ctx) {
     // Unload childrentex
     if (ref->d_children_tex_array) {
 #if CHILDTEX
-        CUDA_SAFE_CALL(cudaUnbindTexture(childrentex));
+        CUDA_SAFE_CALL(cudaDestroyTextureObject(ref->childrenTexObj));
         CUDA_SAFE_CALL(cudaFreeArray((cudaArray *)(ref->d_children_tex_array)));
 #else
         CUDA_SAFE_CALL(cudaFree(ref->d_children_tex_array));
@@ -525,7 +545,7 @@ void unloadReferenceTree(MatchContext *ctx) {
 #else
 
 #if NODETEX
-    CUDA_SAFE_CALL(cudaUnbindTexture(nodetex));
+    CUDA_SAFE_CALL(cudaDestroyTextureObject(ref->nodeTexObj));
 #endif
     CUDA_SAFE_CALL(cudaFree(ref->d_node_tex_array));
 
@@ -534,7 +554,7 @@ void unloadReferenceTree(MatchContext *ctx) {
     // Unload childrentex
     if (ref->d_children_tex_array) {
 #if CHILDTEX
-        CUDA_SAFE_CALL(cudaUnbindTexture(childrentex));
+        CUDA_SAFE_CALL(cudaDestroyTextureObject(ref->childrenTexObj));
 #endif
 
         CUDA_SAFE_CALL(cudaFree(ref->d_children_tex_array));
@@ -589,14 +609,20 @@ void loadReference(MatchContext *ctx) {
             ref->tex_width * ref->tex_node_height * sizeof(PixelOfNode),
             cudaMemcpyHostToDevice));
 
-        nodetex.addressMode[0] = cudaAddressModeClamp;
-        nodetex.addressMode[1] = cudaAddressModeClamp;
-        nodetex.filterMode = cudaFilterModePoint;
-        nodetex.normalized =
-            false; // access with normalized texture coordinates
+        struct cudaResourceDesc resDesc;
+        memset(&resDesc, 0, sizeof(resDesc));
+        resDesc.resType = cudaResourceTypeArray;
+        resDesc.res.array.array = (cudaArray *)ref->d_node_tex_array;
 
-        BIND_TEX_ARRAY(nodetex, (cudaArray *)ref->d_node_tex_array,
-                       nodeTextureDesc);
+        struct cudaTextureDesc texDesc;
+        memset(&texDesc, 0, sizeof(texDesc));
+        texDesc.addressMode[0] = cudaAddressModeClamp;
+        texDesc.addressMode[1] = cudaAddressModeClamp;
+        texDesc.filterMode = cudaFilterModePoint;
+        texDesc.readMode = cudaReadModeElementType;
+        texDesc.normalizedCoords = 0;
+
+        cudaCreateTextureObject(&ref->nodeTexObj, &resDesc, &texDesc, NULL);
 #else
         size_t nodepitch;
 
@@ -625,15 +651,20 @@ void loadReference(MatchContext *ctx) {
                                       sizeof(PixelOfChildren),
                                   cudaMemcpyHostToDevice));
 
-            childrentex.addressMode[0] = cudaAddressModeClamp;
-            childrentex.addressMode[1] = cudaAddressModeClamp;
-            childrentex.filterMode = cudaFilterModePoint;
-            childrentex.normalized =
-                false; // access with normalized texture coordinates
+            struct cudaResourceDesc resDesc;
+            memset(&resDesc, 0, sizeof(resDesc));
+            resDesc.resType = cudaResourceTypeArray;
+            resDesc.res.array.array = (cudaArray *)ref->d_children_tex_array;
 
-            BIND_TEX_ARRAY(childrentex,
-                           (cudaArray *)(ref->d_children_tex_array),
-                           childrenTextureDesc);
+            struct cudaTextureDesc texDesc;
+            memset(&texDesc, 0, sizeof(texDesc));
+            texDesc.addressMode[0] = cudaAddressModeClamp;
+            texDesc.addressMode[1] = cudaAddressModeClamp;
+            texDesc.filterMode = cudaFilterModePoint;
+            texDesc.readMode = cudaReadModeElementType;
+            texDesc.normalizedCoords = 0;
+
+            cudaCreateTextureObject(&ref->childrenTexObj, &resDesc, &texDesc, NULL);
 #else
             size_t childpitch;
 
@@ -688,13 +719,22 @@ void loadReference(MatchContext *ctx) {
 #if NODETEX
         cudaChannelFormatDesc nodeTextureDesc = cudaCreateChannelDesc(
             32, 32, 32, 32, cudaChannelFormatKindUnsigned);
-        nodetex.addressMode[0] = cudaAddressModeClamp;
-        nodetex.filterMode = cudaFilterModePoint;
-        nodetex.normalized =
-            false; // access with normalized texture coordinates
 
-        BIND_TEX(0, nodetex, (void *)(ref->d_node_tex_array), nodeTextureDesc,
-                 ref->tex_node_height * sizeof(PixelOfNode));
+        struct cudaResourceDesc resDesc;
+        memset(&resDesc, 0, sizeof(resDesc));
+        resDesc.resType = cudaResourceTypeLinear;
+        resDesc.res.linear.devPtr = (void *)ref->d_node_tex_array;
+        resDesc.res.linear.desc = nodeTextureDesc;
+        resDesc.res.linear.sizeInBytes = ref->tex_node_height * sizeof(PixelOfNode);
+
+        struct cudaTextureDesc texDesc;
+        memset(&texDesc, 0, sizeof(texDesc));
+        texDesc.addressMode[0] = cudaAddressModeClamp;
+        texDesc.filterMode = cudaFilterModePoint;
+        texDesc.readMode = cudaReadModeElementType;
+        texDesc.normalizedCoords = 0;
+
+        cudaCreateTextureObject(&ref->nodeTexObj, &resDesc, &texDesc, NULL);
 #endif
         if (ref->tex_children_height) {
             // Child tex, 1-dimensional
@@ -708,14 +748,22 @@ void loadReference(MatchContext *ctx) {
 #if CHILDTEX
             cudaChannelFormatDesc childTextureDesc = cudaCreateChannelDesc(
                 32, 32, 32, 32, cudaChannelFormatKindUnsigned);
-            childrentex.addressMode[0] = cudaAddressModeClamp;
-            childrentex.filterMode = cudaFilterModePoint;
-            childrentex.normalized =
-                false; // access with normalized texture coordinates
 
-            BIND_TEX(0, childrentex, (void *)(ref->d_children_tex_array),
-                     childTextureDesc,
-                     ref->tex_children_height * sizeof(PixelOfChildren));
+            struct cudaResourceDesc resDesc;
+            memset(&resDesc, 0, sizeof(resDesc));
+            resDesc.resType = cudaResourceTypeLinear;
+            resDesc.res.linear.devPtr = (void *)ref->d_children_tex_array;
+            resDesc.res.linear.desc = childTextureDesc;
+            resDesc.res.linear.sizeInBytes = ref->tex_children_height * sizeof(PixelOfChildren);
+
+            struct cudaTextureDesc texDesc;
+            memset(&texDesc, 0, sizeof(texDesc));
+            texDesc.addressMode[0] = cudaAddressModeClamp;
+            texDesc.filterMode = cudaFilterModePoint;
+            texDesc.readMode = cudaReadModeElementType;
+            texDesc.normalizedCoords = 0;
+
+            cudaCreateTextureObject(&ref->childrenTexObj, &resDesc, &texDesc, NULL);
 #endif
         }
 
@@ -840,13 +888,24 @@ void loadQueries(MatchContext *ctx) {
                        queries->texlen, cudaMemcpyHostToDevice));
 
 #if QRYTEX
-        qrytex.addressMode[0] = cudaAddressModeClamp;
-        qrytex.filterMode = cudaFilterModePoint;
-        qrytex.normalized = false; // access with normalized texture coordinates
         cudaChannelFormatDesc qryDesc =
             cudaCreateChannelDesc(8, 0, 0, 0, cudaChannelFormatKindUnsigned);
-        BIND_TEX(0, qrytex, (void *)(queries->d_tex_array), qryDesc,
-                 queries->texlen);
+
+        struct cudaResourceDesc resDesc;
+        memset(&resDesc, 0, sizeof(resDesc));
+        resDesc.resType = cudaResourceTypeLinear;
+        resDesc.res.linear.devPtr = (void *)queries->d_tex_array;
+        resDesc.res.linear.desc = qryDesc;
+        resDesc.res.linear.sizeInBytes = queries->texlen;
+
+        struct cudaTextureDesc texDesc;
+        memset(&texDesc, 0, sizeof(texDesc));
+        texDesc.addressMode[0] = cudaAddressModeClamp;
+        texDesc.filterMode = cudaFilterModePoint;
+        texDesc.readMode = cudaReadModeElementType;
+        texDesc.normalizedCoords = 0;
+
+        cudaCreateTextureObject(&queries->qryTexObj, &resDesc, &texDesc, NULL);
 #endif
         CUDA_MALLOC((void **)&queries->d_addrs_tex_array,
                     numQueries * sizeof(int));
@@ -883,6 +942,10 @@ void loadQueries(MatchContext *ctx) {
 
 void unloadQueries(MatchContext *ctx) {
     QuerySet *queries = ctx->queries;
+
+#if QRYTEX
+    CUDA_SAFE_CALL(cudaDestroyTextureObject(queries->qryTexObj));
+#endif
 
     CUDA_SAFE_CALL(cudaFree(queries->d_tex_array));
     queries->d_tex_array = NULL;
@@ -1274,21 +1337,24 @@ void runPrintKernel(MatchContext *ctx, ReferencePage *page,
     printKernel<<<dimGrid, dimBlock, 0>>>(
         d_matches, numMatches, d_alignments,
 
-#if COALESCED_QUERIES
-        ctx->results.d_coord_tex_array,
-#endif
-
-#if !QRYTEX
+#if QRYTEX
+        ctx->queries->qryTexObj,
+#else
 #if COALESCED_QUERIES
         (int *)
 #endif
             ctx->queries->d_tex_array,
 #endif
 
-#if !NODETEX
+#if NODETEX
+        ctx->ref->nodeTexObj,
+#else
         (_PixelOfNode *)ctx->ref->d_node_tex_array,
 #endif
-#if !CHILDTEX
+
+#if CHILDTEX
+        ctx->ref->childrenTexObj,
+#else
         (_PixelOfChildren *)ctx->ref->d_children_tex_array,
 #endif
         ctx->queries->d_addrs_tex_array, ctx->queries->d_lengths_array,
@@ -1775,22 +1841,30 @@ void matchOnGPU(MatchContext *ctx, bool doRC) {
             ctx->results.d_coord_tex_array,
 #endif
 
-#if !QRYTEX
+#if QRYTEX
+            ctx->queries->qryTexObj,
+#else
 #if COALESCED_QUERIES
             (int *)
 #endif
                 ctx->queries->d_tex_array,
 #endif
 
-#if !NODETEX
+#if NODETEX
+            ctx->ref->nodeTexObj,
+#else
             (_PixelOfNode *)(ctx->ref->d_node_tex_array),
 #endif
 
-#if !CHILDTEX
+#if CHILDTEX
+            ctx->ref->childrenTexObj,
+#else
             (_PixelOfChildren *)(ctx->ref->d_children_tex_array),
 #endif
 
-#if !REFTEX
+#if REFTEX
+            ctx->ref->refTexObj,
+#else
             (char *)ctx->ref->d_ref_array,
 #endif
             ctx->queries->d_addrs_tex_array, ctx->queries->d_lengths_array,
