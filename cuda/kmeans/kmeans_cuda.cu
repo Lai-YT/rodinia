@@ -17,11 +17,12 @@
 #include "kmeans_cuda_kernel.cu"
 
 
-//#define BLOCK_DELTA_REDUCE
-//#define BLOCK_CENTER_REDUCE
+#define BLOCK_DELTA_REDUCE
+#define BLOCK_CENTER_REDUCE
 
-#define CPU_DELTA_REDUCE
-#define CPU_CENTER_REDUCE
+// disable CPU-side reductions when using block/GPU reductions
+// #define CPU_DELTA_REDUCE
+// #define CPU_CENTER_REDUCE
 
 extern "C" int setup(int argc, char **argv); /* function prototype */
 
@@ -252,18 +253,16 @@ extern "C" int // delta -- had problems when return value was of float type
         (float *)malloc(num_blocks_perdim * num_blocks_perdim * nclusters *
                         nfeatures * sizeof(float));
 
-    cudaMemcpy(block_clusters_h, block_clusters_d,
+    checkCudaErrors(cudaMemcpy(block_clusters_h, block_clusters_d,
                num_blocks_perdim * num_blocks_perdim * nclusters * nfeatures *
-                   sizeof(float),
-               checkCudaErrors(cudaMemcpyDeviceToHost));
+                   sizeof(float), cudaMemcpyDeviceToHost));
 #endif
 #ifdef BLOCK_DELTA_REDUCE
     int *block_deltas_h =
         (int *)malloc(num_blocks_perdim * num_blocks_perdim * sizeof(int));
 
-    cudaMemcpy(block_deltas_h, block_deltas_d,
-               num_blocks_perdim * num_blocks_perdim * sizeof(int),
-               checkCudaErrors(cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaMemcpy(block_deltas_h, block_deltas_d,
+               num_blocks_perdim * num_blocks_perdim * sizeof(int), cudaMemcpyDeviceToHost));
 #endif
 
     /* for each point, sum data points in each cluster
