@@ -12,10 +12,7 @@
 #define SDATA(index) CUT_BANK_CHECKER(sdata, index)
 
 // t_features has the layout dim0[points 0-m-1]dim1[ points 0-m-1]...
-texture<float, 1, cudaReadModeElementType> t_features;
 // t_features_flipped has the layout point0[dim 0-n-1]point1[dim 0-n-1]
-texture<float, 1, cudaReadModeElementType> t_features_flipped;
-texture<float, 1, cudaReadModeElementType> t_clusters;
 
 
 __constant__ float c_clusters[ASSUMED_NR_CLUSTERS *
@@ -58,7 +55,10 @@ __global__ void invert_mapping(float *input,  /* original */
 __global__ void kmeansPoint(float *features, /* in: [npoints*nfeatures] */
                             int nfeatures, int npoints, int nclusters,
                             int *membership, float *clusters,
-                            float *block_clusters, int *block_deltas) {
+                            float *block_clusters, int *block_deltas,
+                            cudaTextureObject_t t_features,
+                            cudaTextureObject_t t_features_flipped,
+                            cudaTextureObject_t t_clusters) {
 
     // block ID
     const unsigned int block_id = gridDim.x * blockIdx.y + blockIdx.x;
@@ -83,7 +83,7 @@ __global__ void kmeansPoint(float *features, /* in: [npoints*nfeatures] */
             for (j = 0; j < nfeatures; j++) {
                 int addr = point_id +
                            j * npoints; /* appropriate index of data point */
-                float diff = (tex1Dfetch(t_features, addr) -
+                float diff = (tex1Dfetch<float>(t_features, addr) -
                               c_clusters[cluster_base_index +
                                          j]); /* distance between a data point
                                                  to cluster centers */
@@ -169,7 +169,7 @@ __global__ void kmeansPoint(float *features, /* in: [npoints*nfeatures] */
         // accumulate over all the elements of this threadblock
         for (int i = 0; i < (THREADS_PER_BLOCK); i++) {
             float val =
-                tex1Dfetch(t_features_flipped, new_base_index + i * nfeatures);
+                tex1Dfetch<float>(t_features_flipped, new_base_index + i * nfeatures);
             if (new_center_ids[i] == center_id)
                 accumulator += val;
         }

@@ -26,13 +26,9 @@ __constant__ float c_cos_angle[NPOINTS];
 __constant__ int c_tX[NCIRCLES * NPOINTS];
 __constant__ int c_tY[NCIRCLES * NPOINTS];
 
-// Texture references to the gradient matrices used by the GICOV kernel
-texture<float, 1, cudaReadModeElementType> t_grad_x;
-texture<float, 1, cudaReadModeElementType> t_grad_y;
-
 // Kernel to find the maximal GICOV value at each pixel of a
 //  video frame, based on the input x- and y-gradient matrices
-__global__ void GICOV_kernel(int grad_m, float *gicov) {
+__global__ void GICOV_kernel(int grad_m, float *gicov, cudaTextureObject_t t_grad_x, cudaTextureObject_t t_grad_y) {
     int i, j, k, n, x, y;
 
     // Determine this thread's pixel
@@ -56,8 +52,8 @@ __global__ void GICOV_kernel(int grad_m, float *gicov) {
 
             // Compute the combined gradient value at the current sample point
             int addr = x * grad_m + y;
-            float p = tex1Dfetch(t_grad_x, addr) * c_cos_angle[n] +
-                      tex1Dfetch(t_grad_y, addr) * c_sin_angle[n];
+            float p = tex1Dfetch<float>(t_grad_x, addr) * c_cos_angle[n] +
+                      tex1Dfetch<float>(t_grad_y, addr) * c_sin_angle[n];
 
             // Update the running total
             sum += p;
@@ -102,9 +98,32 @@ float *GICOV_CUDA(int grad_m, int grad_n, float *host_grad_x,
     cudaMemcpy(device_grad_y, host_grad_y, grad_mem_size,
                cudaMemcpyHostToDevice);
 
-    // Bind the device arrays to texture references
-    cudaBindTexture(0, t_grad_x, device_grad_x, grad_mem_size);
-    cudaBindTexture(0, t_grad_y, device_grad_y, grad_mem_size);
+    // Create texture objects
+    cudaResourceDesc resDescX;
+    memset(&resDescX, 0, sizeof(resDescX));
+    resDescX.resType = cudaResourceTypeLinear;
+    resDescX.res.linear.devPtr = device_grad_x;
+    resDescX.res.linear.desc.f = cudaChannelFormatKindFloat;
+    resDescX.res.linear.desc.x = 32; // float is 32 bits
+    resDescX.res.linear.sizeInBytes = grad_mem_size;
+
+    cudaTextureDesc texDesc;
+    memset(&texDesc, 0, sizeof(texDesc));
+    texDesc.readMode = cudaReadModeElementType;
+
+    cudaTextureObject_t tex_grad_x = 0;
+    cudaCreateTextureObject(&tex_grad_x, &resDescX, &texDesc, NULL);
+
+    cudaResourceDesc resDescY;
+    memset(&resDescY, 0, sizeof(resDescY));
+    resDescY.resType = cudaResourceTypeLinear;
+    resDescY.res.linear.devPtr = device_grad_y;
+    resDescY.res.linear.desc.f = cudaChannelFormatKindFloat;
+    resDescY.res.linear.desc.x = 32;
+    resDescY.res.linear.sizeInBytes = grad_mem_size;
+
+    cudaTextureObject_t tex_grad_y = 0;
+    cudaCreateTextureObject(&tex_grad_y, &resDescY, &texDesc, NULL);
 
     // Allocate & initialize device memory for result
     // (some elements are not assigned values in the kernel)
@@ -117,7 +136,7 @@ float *GICOV_CUDA(int grad_m, int grad_n, float *host_grad_x,
 
     // Execute the GICOV kernel
     PROFILE((
-        GICOV_kernel<<<num_blocks, threads_per_block>>>(grad_m, device_gicov)
+        GICOV_kernel<<<num_blocks, threads_per_block>>>(grad_m, device_gicov, tex_grad_x, tex_grad_y)
     ));
 
     // Check for kernel errors
@@ -133,8 +152,8 @@ float *GICOV_CUDA(int grad_m, int grad_n, float *host_grad_x,
     cudaMemcpy(host_gicov, device_gicov, grad_mem_size, cudaMemcpyDeviceToHost);
 
     // Cleanup memory
-    cudaUnbindTexture(t_grad_x);
-    cudaUnbindTexture(t_grad_y);
+    cudaDestroyTextureObject(tex_grad_x);
+    cudaDestroyTextureObject(tex_grad_y);
     cudaFree(device_grad_x);
     cudaFree(device_grad_y);
 
@@ -146,16 +165,13 @@ float *GICOV_CUDA(int grad_m, int grad_n, float *host_grad_x,
 // kernel
 __constant__ float c_strel[STREL_SIZE * STREL_SIZE];
 
-// Texture reference to the GICOV matrix used by the dilation kernel
-texture<float, 1, cudaReadModeElementType> t_img;
-
 // Kernel to compute the dilation of the GICOV matrix produced by the GICOV
 // kernel
 // Each element (i, j) of the output matrix is set equal to the maximal value in
 //  the neighborhood surrounding element (i, j) in the input matrix
 // Here the neighborhood is defined by the structuring element (c_strel)
 __global__ void dilate_kernel(int img_m, int img_n, int strel_m, int strel_n,
-                              float *dilated) {
+                              float *dilated, cudaTextureObject_t t_img) {
     // Find the center of the structuring element
     int el_center_i = strel_m / 2;
     int el_center_j = strel_n / 2;
@@ -183,7 +199,7 @@ __global__ void dilate_kernel(int img_m, int img_n, int strel_m, int strel_n,
                     (c_strel[(el_i * strel_n) + el_j] != 0)) {
                     // Determine if this is maximal value seen so far
                     int addr = (x * img_m) + y;
-                    float temp = tex1Dfetch(t_img, addr);
+                    float temp = tex1Dfetch<float>(t_img, addr);
                     if (temp > max)
                         max = temp;
                 }
@@ -203,8 +219,21 @@ float *dilate_CUDA(int max_gicov_m, int max_gicov_n, int strel_m, int strel_n) {
     float *device_img_dilated;
     cudaMalloc((void **)&device_img_dilated, max_gicov_mem_size);
 
-    // Bind the input matrix of GICOV values to a texture reference
-    cudaBindTexture(0, t_img, device_gicov, max_gicov_mem_size);
+    // Create texture object
+    cudaResourceDesc resDesc;
+    memset(&resDesc, 0, sizeof(resDesc));
+    resDesc.resType = cudaResourceTypeLinear;
+    resDesc.res.linear.devPtr = device_gicov;
+    resDesc.res.linear.desc.f = cudaChannelFormatKindFloat;
+    resDesc.res.linear.desc.x = 32;
+    resDesc.res.linear.sizeInBytes = max_gicov_mem_size;
+
+    cudaTextureDesc texDesc;
+    memset(&texDesc, 0, sizeof(texDesc));
+    texDesc.readMode = cudaReadModeElementType;
+
+    cudaTextureObject_t tex_img = 0;
+    cudaCreateTextureObject(&tex_img, &resDesc, &texDesc, NULL);
 
     // Setup execution parameters
     int num_threads = max_gicov_m * max_gicov_n;
@@ -215,7 +244,7 @@ float *dilate_CUDA(int max_gicov_m, int max_gicov_n, int strel_m, int strel_n) {
     // Execute the dilation kernel
     PROFILE((
         dilate_kernel<<<num_blocks, threads_per_block>>>(
-            max_gicov_m, max_gicov_n, strel_m, strel_n, device_img_dilated)
+            max_gicov_m, max_gicov_n, strel_m, strel_n, device_img_dilated, tex_img)
     ));
 
     // Check for kernel errors
@@ -232,7 +261,7 @@ float *dilate_CUDA(int max_gicov_m, int max_gicov_n, int strel_m, int strel_n) {
                cudaMemcpyDeviceToHost);
 
     // Cleanup memory
-    cudaUnbindTexture(t_img);
+    cudaDestroyTextureObject(tex_img);
     cudaFree(device_gicov);
     cudaFree(device_img_dilated);
 

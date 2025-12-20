@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <helper_cuda.h>
 #include "mergesort.cuh"
 #include "mergesort_kernel.cu"
 ////////////////////////////////////////////////////////////////////////////////
@@ -30,13 +31,27 @@ float4 *runMergeSort(int listsize, int divisions, float4 *d_origList,
     }
     largestSize *= 4;
 
-    // Setup texture
+    // Setup texture object (for float4 linear memory)
     cudaChannelFormatDesc channelDesc =
         cudaCreateChannelDesc(32, 32, 32, 32, cudaChannelFormatKindFloat);
-    tex.addressMode[0] = cudaAddressModeWrap;
-    tex.addressMode[1] = cudaAddressModeWrap;
-    tex.filterMode = cudaFilterModePoint;
-    tex.normalized = false;
+
+    cudaResourceDesc resDesc;
+    memset(&resDesc, 0, sizeof(resDesc));
+    resDesc.resType = cudaResourceTypeLinear;
+    resDesc.res.linear.devPtr = (void *)d_origList;
+    resDesc.res.linear.desc = channelDesc;
+    resDesc.res.linear.sizeInBytes = listsize * sizeof(float);
+
+    cudaTextureDesc texDesc;
+    memset(&texDesc, 0, sizeof(texDesc));
+    texDesc.addressMode[0] = cudaAddressModeWrap;
+    texDesc.addressMode[1] = cudaAddressModeWrap;
+    texDesc.filterMode = cudaFilterModePoint;
+    texDesc.readMode = cudaReadModeElementType;
+    texDesc.normalizedCoords = 0;
+
+    cudaTextureObject_t texObj = 0;
+    checkCudaErrors(cudaCreateTextureObject(&texObj, &resDesc, &texDesc, NULL));
 
 ////////////////////////////////////////////////////////////////////////////
 // First sort all float4 elements internally
@@ -50,8 +65,7 @@ float4 *runMergeSort(int listsize, int divisions, float4 *d_origList,
     int blocks = ((listsize / 4) % THREADS == 0) ? (listsize / 4) / THREADS
                                                  : (listsize / 4) / THREADS + 1;
     dim3 grid(blocks, 1);
-    cudaBindTexture(0, tex, d_origList, channelDesc, listsize * sizeof(float));
-    mergeSortFirst<<<grid, threads>>>(d_resultList, listsize);
+    mergeSortFirst<<<grid, threads>>>(d_resultList, listsize, texObj);
 
     ////////////////////////////////////////////////////////////////////////////
     // Then, go level by level
@@ -84,9 +98,15 @@ float4 *runMergeSort(int listsize, int divisions, float4 *d_origList,
         float4 *tempList = d_origList;
         d_origList = d_resultList;
         d_resultList = tempList;
-        cudaBindTexture(0, tex, d_origList, channelDesc,
-                        listsize * sizeof(float));
-        mergeSortPass<<<grid, threads>>>(d_resultList, nrElems, threadsPerDiv);
+        // recreate texture object for new source pointer
+        checkCudaErrors(cudaDestroyTextureObject(texObj));
+        memset(&resDesc, 0, sizeof(resDesc));
+        resDesc.resType = cudaResourceTypeLinear;
+        resDesc.res.linear.devPtr = (void *)d_origList;
+        resDesc.res.linear.desc = channelDesc;
+        resDesc.res.linear.sizeInBytes = listsize * sizeof(float);
+        checkCudaErrors(cudaCreateTextureObject(&texObj, &resDesc, &texDesc, NULL));
+        mergeSortPass<<<grid, threads>>>(d_resultList, nrElems, threadsPerDiv, texObj);
         nrElems *= 2;
         floatsperthread = (nrElems * 4);
         if (threadsPerDiv == 1)
@@ -104,6 +124,7 @@ float4 *runMergeSort(int listsize, int divisions, float4 *d_origList,
                                               : (largestSize / threads.x) + 1;
     grid.y = divisions;
     mergepack<<<grid, threads>>>((float *)d_resultList, (float *)d_origList);
+    checkCudaErrors(cudaDestroyTextureObject(texObj));
 
     free(startaddr);
     return d_origList;

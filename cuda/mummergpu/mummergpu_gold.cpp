@@ -4,10 +4,6 @@
 #include <fstream>
 #include <stdint.h>
 
-#define ulong4 uint32_t
-#define int2 int32_t
-#define uint4 uint32_t
-
 #include "omp.h"
 #include "mummergpu.h"
 // Matches are reported as a node in the suffix tree,
@@ -452,7 +448,7 @@ int kernel_gold(int qryid, MatchResults *results, char *queries,
       {
 	    // start at root of tree
 	    cur.x = 0; cur.y = 1;
-	    qry_match_len = 1; 
+	    qry_match_len = 1;
         mustmatch = 0;
       }
 
@@ -476,7 +472,7 @@ int kernel_gold(int qryid, MatchResults *results, char *queries,
 			case 'G': cur=children.children[2]; break;
 			case 'T': cur=children.children[3]; break;
             default: cur.data = 0; break;
-		 };		 
+		 };
 
 		 XPRINTF(" In node: (%d,%d)\n", cur.x, cur.y);
 
@@ -513,7 +509,7 @@ int kernel_gold(int qryid, MatchResults *results, char *queries,
            }
            else
            {
-             XPRINTF(" mustmatch(%d) < edgelen(%d), skipping to:%d\n", 
+             XPRINTF(" mustmatch(%d) < edgelen(%d), skipping to:%d\n",
                      mustmatch, edgelen, node.start+mustmatch);
 
              qry_match_len += mustmatch;
@@ -531,11 +527,11 @@ int kernel_gold(int qryid, MatchResults *results, char *queries,
 		 c = queries[qry_match_len];
 
 		 while (refpos <= node.end && c != '\0')
-		 { 
+		 {
             //char r = getRefGold(refpos);
 			char r = refstr[refpos];
 			XPRINTF(" Edge cmp ref: %d %c, qry: %d %c\n", refpos, r, qry_match_len, c);
-						
+
 			if (r != c)
 			{
 			   // mismatch on edge
@@ -552,7 +548,7 @@ int kernel_gold(int qryid, MatchResults *results, char *queries,
 	  XPRINTF("end of string\n");
 
       RECORD_RESULT:
-	
+
       set_result(cur, result, refpos - node.start, qry_match_len, min_match_len, FORWARD);
       mustmatch = refpos - node.start;
       qry_match_len -= mustmatch + 1;
@@ -563,7 +559,7 @@ int kernel_gold(int qryid, MatchResults *results, char *queries,
 	  node = *(nodeTexture +  (prev.x) + ((prev.y) * maxdim));
       cur = node.suffix;
 
-      XPRINTF(" following suffix link. mustmatch:%d qry_match_len:%d sl:(%d,%d)\n", 
+      XPRINTF(" following suffix link. mustmatch:%d qry_match_len:%d sl:(%d,%d)\n",
               mustmatch, qry_match_len, cur.x, cur.y);
 
       do {} while(0);
@@ -622,7 +618,7 @@ void rc_kernel_gold(int qryid, MatchResults *results, char *refstr,
    int mustmatch = 0;
    int qry_match_len = 0;
 
-   int qryAddr=queryAddrs[qryid]; 
+   int qryAddr=queryAddrs[qryid];
    MatchCoord * result = results->h_match_coords + qryAddr - (qryid * ( min_match_len + 1));
    queries += qryAddr;
 
@@ -645,7 +641,7 @@ void rc_kernel_gold(int qryid, MatchResults *results, char *refstr,
       {
 	    // start at root of tree
 	    cur.x = 0; cur.y = 1;
-	    qry_match_len = 1; 
+	    qry_match_len = 1;
         mustmatch = 0;
       }
 
@@ -669,7 +665,7 @@ void rc_kernel_gold(int qryid, MatchResults *results, char *refstr,
 			case 'G': cur=children.children[2]; break;
 			case 'T': cur=children.children[3]; break;
             default: cur.data = 0; break;
-		 };		 
+		 };
 
 		 XPRINTF(" In node: (%d,%d)\n", cur.x, cur.y);
 
@@ -677,7 +673,7 @@ void rc_kernel_gold(int qryid, MatchResults *results, char *refstr,
          if (cur.data == 0)
 		 {
 			XPRINTF(" no edge\n");
-	        set_result(prev, result, 0, qry_match_len, min_match_len, 
+	        set_result(prev, result, 0, qry_match_len, min_match_len,
                        REVERSE);
 
             qry_match_len -= 1;
@@ -707,7 +703,7 @@ void rc_kernel_gold(int qryid, MatchResults *results, char *refstr,
            }
            else
            {
-             XPRINTF(" mustmatch(%d) < edgelen(%d), skipping to:%d\n", 
+             XPRINTF(" mustmatch(%d) < edgelen(%d), skipping to:%d\n",
                      mustmatch, edgelen, node.start+mustmatch);
 
              qry_match_len += mustmatch;
@@ -725,11 +721,11 @@ void rc_kernel_gold(int qryid, MatchResults *results, char *refstr,
 		 c = rc(queries[qrystart-qry_match_len]);
 
 		 while (refpos <= node.end && c != '\0')
-		 { 
+		 {
             //char r = getRefGold(refstr, refpos);
 			char r = refstr[refpos];
 			XPRINTF(" Edge cmp ref: %d %c, qry: %d %c\n", refpos, r, qry_match_len, c);
-						
+
 			if (r != c)
 			{
 			   // mismatch on edge
@@ -746,8 +742,8 @@ void rc_kernel_gold(int qryid, MatchResults *results, char *refstr,
 	  XPRINTF("end of string\n");
 
       RECORD_RESULT:
-	
-      set_result(cur, result, refpos - node.start, qry_match_len, 
+
+      set_result(cur, result, refpos - node.start, qry_match_len,
                  min_match_len, REVERSE);
 
       mustmatch = refpos - node.start;
@@ -758,7 +754,7 @@ void rc_kernel_gold(int qryid, MatchResults *results, char *refstr,
 	  node = *(nodeTexture +  (prev.x) + ((prev.y) * maxdim));
       cur = node.suffix;
 
-      XPRINTF(" following suffix link. mustmatch:%d qry_match_len:%d sl:(%d,%d)\n", 
+      XPRINTF(" following suffix link. mustmatch:%d qry_match_len:%d sl:(%d,%d)\n",
               mustmatch, qry_match_len, cur.x, cur.y);
 
       do {} while(0);

@@ -34,7 +34,7 @@
      ((0xFF) << (((qrypos)&0x00000003)) << 3)) >>                              \
         ((((qrypos)&0x00000003)) << 3)
 #elif QRYTEX
-#define GETQCHAR(qrypos) tex1Dfetch(qrytex, qryAddr + qrypos)
+#define GETQCHAR(qrypos) tex1Dfetch<char>(qrytex, qryAddr + qrypos)
 #else
 #define GETQCHAR(qrypos) queries[qrypos]
 #endif
@@ -50,7 +50,7 @@
 #endif
 
 #if REFTEX
-#define GETRCHAR(refpos) getRef(refpos)
+#define GETRCHAR(refpos) getRef(refpos, reftex)
 #else
 #define GETRCHAR(refpos) getRef(refpos, ref)
 #endif
@@ -61,12 +61,12 @@
 #if TREE_ACCESS_HISTOGRAM
 
 #if NODETEX
-#define GETNODE(addr, two_level) getMerged(addr, two_level, 0, NULL, NULL)
+#define GETNODE(addr, two_level) getMerged(nodetex, childrentex, addr, two_level, 0, NULL, NULL)
 #define GETNODEHIST(addr, two_level)                                           \
-    getMerged(addr, two_level, 0, node_hist, child_hist)
-#define GETCHILDREN(addr, two_level) getMerged(addr, two_level, 1, NULL, NULL)
+    getMerged(nodetex, childrentex, addr, two_level, 0, node_hist, child_hist)
+#define GETCHILDREN(addr, two_level) getMerged(nodetex, childrentex, addr, two_level, 1, NULL, NULL)
 #define GETCHILDRENHIST(addr, two_level)                                       \
-    getMerged(addr, two_level, 1, node_hist, child_hist)
+    getMerged(nodetex, childrentex, addr, two_level, 1, node_hist, child_hist)
 #else
 #define GETNODE(addr, two_level)                                               \
     getMerged(nodes, childrenarr, addr, two_level, 0, NULL, NULL)
@@ -80,10 +80,10 @@
 
 #else
 #if NODETEX
-#define GETNODE(addr, two_level) getMerged(addr, two_level, 0)
-#define GETNODEHIST(addr, two_level) getMerged(addr, two_level, 0)
-#define GETCHILDREN(addr, two_level) getMerged(addr, two_level, 1)
-#define GETCHILDRENHIST(addr, two_level) getMerged(addr, two_level, 1)
+#define GETNODE(addr, two_level) getMerged(nodetex, childrentex, addr, two_level, 0)
+#define GETNODEHIST(addr, two_level) getMerged(nodetex, childrentex, addr, two_level, 0)
+#define GETCHILDREN(addr, two_level) getMerged(nodetex, childrentex, addr, two_level, 1)
+#define GETCHILDRENHIST(addr, two_level) getMerged(nodetex, childrentex, addr, two_level, 1)
 #else
 #define GETNODE(addr, two_level)                                               \
     getMerged(nodes, childrenarr, addr, two_level, 0)
@@ -100,11 +100,11 @@
 
 #if NODETEX
 #if TREE_ACCESS_HISTOGRAM
-#define GETNODEHIST(addr, two_level) getNode(addr, two_level, node_hist)
-#define GETNODE(addr, two_level) getNode(addr, two_level, NULL)
+#define GETNODEHIST(addr, two_level) getNode(addr, two_level, nodetex, node_hist)
+#define GETNODE(addr, two_level) getNode(addr, two_level, nodetex, NULL)
 #else
-#define GETNODEHIST(addr, two_level) getNode(addr, two_level)
-#define GETNODE(addr, two_level) getNode(addr, two_level)
+#define GETNODEHIST(addr, two_level) getNode(addr, two_level, nodetex)
+#define GETNODE(addr, two_level) getNode(addr, two_level, nodetex)
 #endif
 #else
 #if TREE_ACCESS_HISTOGRAM
@@ -119,11 +119,11 @@
 #if CHILDTEX
 #if TREE_ACCESS_HISTOGRAM
 #define GETCHILDRENHIST(addr, two_level)                                       \
-    getChildren(addr, two_level, child_hist)
-#define GETCHILDREN(addr, two_level) getChildren(addr, two_level, NULL)
+    getChildren(addr, two_level, childrentex, child_hist)
+#define GETCHILDREN(addr, two_level) getChildren(addr, two_level, childrentex, NULL)
 #else
-#define GETCHILDRENHIST(addr, two_level) getChildren(addr, two_level)
-#define GETCHILDREN(addr, two_level) getChildren(addr, two_level)
+#define GETCHILDRENHIST(addr, two_level) getChildren(addr, two_level, childrentex)
+#define GETCHILDREN(addr, two_level) getChildren(addr, two_level, childrentex)
 #endif
 #else
 #if TREE_ACCESS_HISTOGRAM
@@ -146,23 +146,6 @@
 #else
 #define SHIFT_QUERIES(queries, qryAddr) queries += qryAddr
 #endif
-
-#if REORDER_TREE
-texture<uint4, 2, cudaReadModeElementType> nodetex;
-texture<uint4, 2, cudaReadModeElementType> childrentex;
-#else
-texture<uint4, 1, cudaReadModeElementType> nodetex;
-texture<uint4, 1, cudaReadModeElementType> childrentex;
-#endif
-
-
-#if REORDER_REF
-texture<char, 2, cudaReadModeElementType> reftex;
-#else
-texture<char, 1, cudaReadModeElementType> reftex;
-#endif
-
-texture<char, 1, cudaReadModeElementType> qrytex;
 
 struct __align__(8) _MatchCoord {
     union {
@@ -312,9 +295,10 @@ __device__ void arrayToAddress(uchar3 arr, unsigned int &addr) {
 //////////////////////////////////
 
 __device__ char getRef(int refpos
-#if !REFTEX
-                       ,
-                       char *ref
+#if REFTEX
+                       , cudaTextureObject_t reftex
+#else
+                       , char *ref
 #endif
                        ) {
 #if REORDER_REF
@@ -324,13 +308,13 @@ __device__ char getRef(int refpos
     int x = bigx >> 2;
 
 #if REFTEX
-    return tex2D(reftex, x, y);
+    return tex2D<char>(reftex, x, y);
 #else
     return *(ref + 65536 * y + x);
 #endif
 #else
 #if REFTEX
-    return tex1Dfetch(reftex, refpos);
+    return tex1Dfetch<char>(reftex, refpos);
 #else
     return ref[refpos];
 #endif
@@ -363,9 +347,10 @@ __device__ char rc(char c) {
 //////////////////////////////////
 
 __device__ uint4 getNode(unsigned int cur, bool use_two_level
-#if !NODETEX
-                         ,
-                         _PixelOfNode *nodes
+#if NODETEX
+                         , cudaTextureObject_t nodetex
+#else
+                         , _PixelOfNode *nodes
 #endif
 #if TREE_ACCESS_HISTOGRAM
                          ,
@@ -388,9 +373,9 @@ __device__ uint4 getNode(unsigned int cur, bool use_two_level
 
 #if NODETEX
 #if REORDER_TREE
-    return tex2D(nodetex, cur & 0x0000FFFF, (cur & 0xFFFF0000) >> 16);
+    return tex2D<uint4>(nodetex, cur & 0x0000FFFF, (cur & 0xFFFF0000) >> 16);
 #else
-    return tex1Dfetch(nodetex, cur);
+    return tex1Dfetch<uint4>(nodetex, cur);
 #endif
 
 #else
@@ -411,9 +396,10 @@ __device__ uint4 getNode(unsigned int cur, bool use_two_level
 //////////////////////////////////
 
 __device__ uint4 getChildren(unsigned int cur, bool use_two_level
-#if !CHILDTEX
-                             ,
-                             _PixelOfChildren *childrenarr
+#if CHILDTEX
+                             , cudaTextureObject_t childrentex
+#else
+                             , _PixelOfChildren *childrenarr
 #endif
 #if TREE_ACCESS_HISTOGRAM
                              ,
@@ -436,9 +422,9 @@ __device__ uint4 getChildren(unsigned int cur, bool use_two_level
 
 #if CHILDTEX
 #if REORDER_TREE
-    return tex2D(childrentex, cur & 0x0000FFFF, (cur & 0xFFFF0000) >> 16);
+    return tex2D<uint4>(childrentex, cur & 0x0000FFFF, (cur & 0xFFFF0000) >> 16);
 #else
-    return tex1Dfetch(childrentex, cur);
+    return tex1Dfetch<uint4>(childrentex, cur);
 #endif
 #else
 #if REORDER_TREE
@@ -458,8 +444,15 @@ __device__ uint4 getChildren(unsigned int cur, bool use_two_level
 //////////////////////////////////
 
 __device__ uint4 getMerged(
-#if !NODETEX
-    _PixelOfNode *nodes, _PixelOfChildren *childrenarr,
+#if NODETEX
+    cudaTextureObject_t nodetex,
+#else
+    _PixelOfNode *nodes,
+#endif
+#if CHILDTEX
+    cudaTextureObject_t childrentex,
+#else
+    _PixelOfChildren *childrenarr,
 #endif
     unsigned int cur, int use_two_level, int getChildrenData
 #if TREE_ACCESS_HISTOGRAM
@@ -513,7 +506,10 @@ INC:
 
     if (useChildrenForData) {
         return getChildren(cur, use_two_level
-#if !CHILDTEX
+#if CHILDTEX
+                           ,
+                           childrentex
+#else
                            ,
                            childrenarr
 #endif
@@ -525,7 +521,10 @@ INC:
                            );
     } else {
         return getNode(cur, use_two_level
-#if !NODETEX
+#if NODETEX
+                       ,
+                       nodetex
+#else
                        ,
                        nodes
 #endif
@@ -701,7 +700,9 @@ __global__ void mummergpuKernel(void *match_coords,
                                 int *coordAddrs,
 #endif
 
-#if !QRYTEX
+#if QRYTEX
+                                cudaTextureObject_t qrytex,
+#else
 #if COALESCED_QUERIES
                                 int *queries,
 #else
@@ -709,15 +710,21 @@ __global__ void mummergpuKernel(void *match_coords,
 #endif
 #endif
 
-#if !NODETEX
+#if NODETEX
+                                cudaTextureObject_t nodetex,
+#else
                                 _PixelOfNode *nodes,
 #endif
 
-#if !CHILDTEX
+#if CHILDTEX
+                                cudaTextureObject_t childrentex,
+#else
                                 _PixelOfChildren *childrenarr,
 #endif
 
-#if !REFTEX
+#if REFTEX
+                                cudaTextureObject_t reftex,
+#else
                                 char *ref,
 #endif
                                 const int *queryAddrs, const int *queryLengths,
@@ -1072,7 +1079,9 @@ __global__ void mummergpuRCKernel(MatchCoord *match_coords, char *queries,
 
 __global__ void printKernel(MatchInfo *matches, int totalMatches,
                             Alignment *alignments,
-#if !QRYTEX
+#if QRYTEX
+                            cudaTextureObject_t qrytex,
+#else
 #if COALESCED_QUERIES
                             int *queries,
 #else
@@ -1080,11 +1089,15 @@ __global__ void printKernel(MatchInfo *matches, int totalMatches,
 #endif
 #endif
 
-#if !NODETEX
+#if NODETEX
+                            cudaTextureObject_t nodetex,
+#else
                             _PixelOfNode *nodes,
 #endif
 
-#if !CHILDTEX
+#if CHILDTEX
+                            cudaTextureObject_t childrentex,
+#else
                             _PixelOfChildren *childrenarr,
 #endif
                             const int *queryAddrs, const int *queryLengths,

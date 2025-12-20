@@ -17,9 +17,6 @@
 #include <assert.h>
 #include <stdint.h>
 
-#define ulong4 uint32_t
-#define uint4 uint32_t
-#define int2 int32_t
 #include "mummergpu.h"
 
 #define MPOOL 0
@@ -2545,9 +2542,9 @@ extern "C" int lookupNumLeaves(ReferencePage *page, TextureAddress addr) {
 #if 0
 struct ExactMatch
 {
-	ExactMatch(unsigned int lr, unsigned short qs, unsigned short ml) 
+	ExactMatch(unsigned int lr, unsigned short qs, unsigned short ml)
 		: left_in_ref(lr), qrystartpos(qs), matchlen(ml) {}
-		
+
 	unsigned int left_in_ref;
 	unsigned short qrystartpos;
 	unsigned short matchlen;
@@ -2561,7 +2558,7 @@ struct EMSortByRefPos
 	}
 };
 
-void align(const string & S, 
+void align(const string & S,
            const string & T,
            int match_score,
            int mismatch_score,
@@ -2580,13 +2577,13 @@ void mapQueryEndToEnd(MatchContext* ctx, vector<ExactMatch>& ems, unsigned int q
 	{
 		int a = 5;
 	}
-	
+
 	for (int i = 0; i < (int)(ems.size() - 1); ++i)
 	{
-		if (candidate_alignments.size() && 
+		if (candidate_alignments.size() &&
 			(ems[i].left_in_ref - length > ems[candidate_alignments.back()].left_in_ref))
 			continue;
-		
+
 		unsigned int j = i;
 		unsigned int left_ref = ems[j].left_in_ref;
 		unsigned int right_ref = left_ref + ems[j].matchlen;
@@ -2611,8 +2608,8 @@ void mapQueryEndToEnd(MatchContext* ctx, vector<ExactMatch>& ems, unsigned int q
 		char refstr[2 * (MAX_QUERY_LEN + MAX_MISMATCH)];
 		memset(refstr, 0, sizeof(refstr));
 		ExactMatch& m = ems[candidate_alignments[i]];
-		strncpy(refstr, 
-				ctx->ref->str + m.left_in_ref - m.qrystartpos - MAX_MISMATCH, 
+		strncpy(refstr,
+				ctx->ref->str + m.left_in_ref - m.qrystartpos - MAX_MISMATCH,
 				2 * (length + MAX_MISMATCH));
 		char* qrystr = ctx->queries->h_tex_array + ctx->queries->h_addrs_tex_array[qry];
 		align(string(refstr), string(qrystr), 10, -2, -2, -2);
@@ -2630,7 +2627,7 @@ void mapQueryEndToEnd(MatchContext* ctx, vector<ExactMatch>& ems, unsigned int q
 	// 		       ems[i].left_in_ref,
 	// 		       ems[i].qrystartpos + 1,
 	// 		       ems[i].matchlen);
-	// 
+	//
 	// 	}
 	// 	else
 	// 	{
@@ -2641,7 +2638,7 @@ void mapQueryEndToEnd(MatchContext* ctx, vector<ExactMatch>& ems, unsigned int q
 	// 	}
 	// 	addToBuffer(buf);
 	//}
-	
+
 	//flushOutput();
 }
 
@@ -2662,7 +2659,7 @@ void mapQueriesEndToEnd(MatchContext* ctx,
 			if (lastqry != -1)
 				mapQueryEndToEnd(ctx, ems, lastqry);
 			ems.clear();
-			
+
             lastqry = h_matches[m].queryid;
             // addToBuffer("> ");
             // addToBuffer(*(ctx->queries->h_names + lastqry));
@@ -2672,7 +2669,7 @@ void mapQueriesEndToEnd(MatchContext* ctx,
 				int a = 5;
 			}
         }
-        
+
         int base = h_matches[m].resultsoffset;
 
         for (int i = 0; i < h_matches[m].numLeaves; i++)
@@ -2685,7 +2682,7 @@ void mapQueriesEndToEnd(MatchContext* ctx,
             ems.push_back(ExactMatch(h_alignments[base+i].left_in_ref,
             					     h_matches[m].qrystartpos + 1,
 									 h_alignments[base+i].matchlen));
-			
+
         }
     }
 }
