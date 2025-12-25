@@ -1,7 +1,7 @@
 include ../common.mk
 
-EXE  = leukocyte
-OBJS = find_ellipse.o find_ellipse_kernel.o track_ellipse.o track_ellipse_kernel.o misc_math.o \
+EXE  = leukocyte leukocyte_surface
+OBJS = find_ellipse.o track_ellipse.o track_ellipse_kernel.o misc_math.o \
        $(MESCHACH_DIR)/libmeschach.a \
        $(AVI_DIR)/avilib.o
 
@@ -27,8 +27,11 @@ $(AVI_DIR)/avilib.o $(AVI_DIR)/avimod.o:
 	$(MAKE) -C $(AVI_DIR)
 CPPFLAGS += -I$(AVI_DIR)
 
-$(EXE): $(OBJS)
-$(EXE): LDLIBS += -lm -lstdc++
+leukocyte: $(OBJS) find_ellipse_kernel.o
+leukocyte: LDLIBS += -lm -lstdc++
+
+leukocyte_surface: $(OBJS) find_ellipse_kernel_surface.o
+leukocyte_surface: LDLIBS += -lm -lstdc++
 
 .PHONY: clean
 clean:
