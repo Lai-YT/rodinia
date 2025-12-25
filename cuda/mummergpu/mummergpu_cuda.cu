@@ -991,7 +991,7 @@ void buildCoordOffsetArray(MatchContext *ctx, int **h_coord_offset_array,
         unsigned int block_size = max_num_coords * WARP_SIZE;
 
         for (unsigned int j = 0; j < WARP_SIZE && (i + j) < numQueries; ++j) {
-            ctx->results.h_coord_tex_array[i + j] = numCoords + j;
+            coord_offsets[i + j] = numCoords + j;
         }
         numCoords += block_size;
     }

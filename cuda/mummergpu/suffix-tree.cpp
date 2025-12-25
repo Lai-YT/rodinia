@@ -1945,7 +1945,7 @@ getQueriesTexture(int qfile, char **queryTexture, size_t *queryTextureSize,
         total_reordered_qry_size += block_size;
 
         reordered_query_chunks.push_back(
-            make_pair<int *, int>(reordered_query_chars, block_size));
+            make_pair(reordered_query_chars, block_size));
     }
 
     free(*queryTexture);
