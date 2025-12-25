@@ -1187,11 +1187,13 @@ void buildNodeTexture(SuffixNode *node, PixelOfNode *nodeTexture,
     writeAddress(arr, myaddress);
     TextureAddress newaddr = arrayToAddress(arr);
 
-    TextureAddress parent(id2addr(node->m_parent->id()));
+    TextureAddress parent =
+        (node->m_parent) ? id2addr(node->m_parent->id()) : id2addr(0);
     writeAddress(nd->parent, parent);
     assert(arrayToAddress(nd->parent).data == parent.data);
 
-    TextureAddress suffix(id2addr(node->m_suffix->id()));
+    TextureAddress suffix =
+        (node->m_suffix) ? id2addr(node->m_suffix->id()) : id2addr(0);
     writeAddress(nd->suffix, suffix);
     assert(arrayToAddress(nd->suffix).data == suffix.data);
 
