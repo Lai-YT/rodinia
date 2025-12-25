@@ -30,9 +30,11 @@
 
 #if COALESCED_QUERIES
 #define GETQCHAR(qrypos)                                                       \
-    ((queries[((qrypos) >> 2) << 4]) &                                         \
-     ((0xFF) << (((qrypos)&0x00000003)) << 3)) >>                              \
-        ((((qrypos)&0x00000003)) << 3)
+    (                                                                          \
+        ((queries[(((qrypos) >> 2) << 4)]) &                                   \
+         (0xFF << ((((qrypos) & 0x00000003) << 3)))) >>                       \
+        (((qrypos) & 0x00000003) << 3)                                         \
+    )
 #elif QRYTEX
 #define GETQCHAR(qrypos) tex1Dfetch<char>(qrytex, qryAddr + qrypos)
 #else
