@@ -14,7 +14,7 @@ const int basecount = 5;
 #endif
 
 #ifndef COALESCED_QUERIES
-#define COALESCED_QUERIES 0
+#define COALESCED_QUERIES 1
 #endif
 
 // Reference parameters
