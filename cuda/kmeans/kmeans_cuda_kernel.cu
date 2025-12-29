@@ -56,9 +56,7 @@ __global__ void kmeansPoint(float *features, /* in: [npoints*nfeatures] */
                             int nfeatures, int npoints, int nclusters,
                             int *membership, float *clusters,
                             float *block_clusters, int *block_deltas,
-                            cudaTextureObject_t t_features,
-                            cudaTextureObject_t t_features_flipped,
-                            cudaTextureObject_t t_clusters) {
+                            const float *features_flipped) {
 
     // block ID
     const unsigned int block_id = gridDim.x * blockIdx.y + blockIdx.x;
@@ -83,9 +81,8 @@ __global__ void kmeansPoint(float *features, /* in: [npoints*nfeatures] */
             for (j = 0; j < nfeatures; j++) {
                 int addr = point_id +
                            j * npoints; /* appropriate index of data point */
-                float diff = (tex1Dfetch<float>(t_features, addr) -
-                              c_clusters[cluster_base_index +
-                                         j]); /* distance between a data point
+                float diff = (features[addr] -
+                          c_clusters[cluster_base_index + j]); /* distance between a data point
                                                  to cluster centers */
                 ans += diff * diff;           /* sum of squares */
             }
@@ -169,7 +166,7 @@ __global__ void kmeansPoint(float *features, /* in: [npoints*nfeatures] */
         // accumulate over all the elements of this threadblock
         for (int i = 0; i < (THREADS_PER_BLOCK); i++) {
             float val =
-                tex1Dfetch<float>(t_features_flipped, new_base_index + i * nfeatures);
+                features_flipped[new_base_index + i * nfeatures];
             if (new_center_ids[i] == center_id)
                 accumulator += val;
         }

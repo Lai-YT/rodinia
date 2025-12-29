@@ -167,58 +167,7 @@ extern "C" int // delta -- had problems when return value was of float type
                                nclusters * nfeatures * sizeof(float),
                                cudaMemcpyHostToDevice));
 
-    /* set up texture objects */
-    cudaTextureObject_t t_features_obj = 0;
-    cudaTextureObject_t t_features_flipped_obj = 0;
-    cudaTextureObject_t t_clusters_obj = 0;
-
-    cudaResourceDesc resDesc0;
-    memset(&resDesc0, 0, sizeof(resDesc0));
-    resDesc0.resType = cudaResourceTypeLinear;
-    resDesc0.res.linear.devPtr = feature_d;
-    resDesc0.res.linear.desc.f = cudaChannelFormatKindFloat;
-    resDesc0.res.linear.desc.x = 32; // float is 32 bits
-    resDesc0.res.linear.sizeInBytes = npoints * nfeatures * sizeof(float);
-
-    cudaTextureDesc texDesc0;
-    memset(&texDesc0, 0, sizeof(texDesc0));
-    texDesc0.readMode = cudaReadModeElementType;
-    texDesc0.filterMode = cudaFilterModePoint;
-    texDesc0.normalizedCoords = 0;
-
-    checkCudaErrors(cudaCreateTextureObject(&t_features_obj, &resDesc0, &texDesc0, NULL));
-
-    cudaResourceDesc resDesc1;
-    memset(&resDesc1, 0, sizeof(resDesc1));
-    resDesc1.resType = cudaResourceTypeLinear;
-    resDesc1.res.linear.devPtr = feature_flipped_d;
-    resDesc1.res.linear.desc.f = cudaChannelFormatKindFloat;
-    resDesc1.res.linear.desc.x = 32;
-    resDesc1.res.linear.sizeInBytes = npoints * nfeatures * sizeof(float);
-
-    cudaTextureDesc texDesc1;
-    memset(&texDesc1, 0, sizeof(texDesc1));
-    texDesc1.readMode = cudaReadModeElementType;
-    texDesc1.filterMode = cudaFilterModePoint;
-    texDesc1.normalizedCoords = 0;
-
-    checkCudaErrors(cudaCreateTextureObject(&t_features_flipped_obj, &resDesc1, &texDesc1, NULL));
-
-    cudaResourceDesc resDesc2;
-    memset(&resDesc2, 0, sizeof(resDesc2));
-    resDesc2.resType = cudaResourceTypeLinear;
-    resDesc2.res.linear.devPtr = clusters_d;
-    resDesc2.res.linear.desc.f = cudaChannelFormatKindFloat;
-    resDesc2.res.linear.desc.x = 32;
-    resDesc2.res.linear.sizeInBytes = nclusters * nfeatures * sizeof(float);
-
-    cudaTextureDesc texDesc2;
-    memset(&texDesc2, 0, sizeof(texDesc2));
-    texDesc2.readMode = cudaReadModeElementType;
-    texDesc2.filterMode = cudaFilterModePoint;
-    texDesc2.normalizedCoords = 0;
-
-    checkCudaErrors(cudaCreateTextureObject(&t_clusters_obj, &resDesc2, &texDesc2, NULL));
+    /* using global memory for feature arrays and clusters; no texture objects */
 
     /* copy clusters to constant memory */
     checkCudaErrors(cudaMemcpyToSymbol(c_clusters, clusters[0],
@@ -234,14 +183,9 @@ extern "C" int // delta -- had problems when return value was of float type
     /* execute the kernel */
     kmeansPoint<<<grid, threads>>>(feature_d, nfeatures, npoints, nclusters,
                                    membership_d, clusters_d, block_clusters_d,
-                                   block_deltas_d,
-                                   t_features_obj, t_features_flipped_obj, t_clusters_obj);
+                                   block_deltas_d, feature_flipped_d);
 
     checkCudaErrors(cudaThreadSynchronize());
-
-    checkCudaErrors(cudaDestroyTextureObject(t_features_obj));
-    checkCudaErrors(cudaDestroyTextureObject(t_features_flipped_obj));
-    checkCudaErrors(cudaDestroyTextureObject(t_clusters_obj));
 
     /* copy back membership (device to host) */
     cudaMemcpy(membership_new, membership_d, npoints * sizeof(int),

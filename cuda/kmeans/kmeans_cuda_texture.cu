@@ -169,41 +169,7 @@ extern "C" int // delta -- had problems when return value was of float type
                                nclusters * nfeatures * sizeof(float),
                                cudaMemcpyHostToDevice));
 
-    /* set up texture objects */
-    cudaTextureObject_t t_features_obj = 0;
-    cudaTextureObject_t t_clusters_obj = 0;
-
-    cudaResourceDesc resDesc0;
-    memset(&resDesc0, 0, sizeof(resDesc0));
-    resDesc0.resType = cudaResourceTypeLinear;
-    resDesc0.res.linear.devPtr = feature_d;
-    resDesc0.res.linear.desc.f = cudaChannelFormatKindFloat;
-    resDesc0.res.linear.desc.x = 32; // float is 32 bits
-    resDesc0.res.linear.sizeInBytes = npoints * nfeatures * sizeof(float);
-
-    cudaTextureDesc texDesc0;
-    memset(&texDesc0, 0, sizeof(texDesc0));
-    texDesc0.readMode = cudaReadModeElementType;
-    texDesc0.filterMode = cudaFilterModePoint;
-    texDesc0.normalizedCoords = 0;
-
-    checkCudaErrors(cudaCreateTextureObject(&t_features_obj, &resDesc0, &texDesc0, NULL));
-
-    cudaResourceDesc resDesc2;
-    memset(&resDesc2, 0, sizeof(resDesc2));
-    resDesc2.resType = cudaResourceTypeLinear;
-    resDesc2.res.linear.devPtr = clusters_d;
-    resDesc2.res.linear.desc.f = cudaChannelFormatKindFloat;
-    resDesc2.res.linear.desc.x = 32;
-    resDesc2.res.linear.sizeInBytes = nclusters * nfeatures * sizeof(float);
-
-    cudaTextureDesc texDesc2;
-    memset(&texDesc2, 0, sizeof(texDesc2));
-    texDesc2.readMode = cudaReadModeElementType;
-    texDesc2.filterMode = cudaFilterModePoint;
-    texDesc2.normalizedCoords = 0;
-
-    checkCudaErrors(cudaCreateTextureObject(&t_clusters_obj, &resDesc2, &texDesc2, NULL));
+    /* using global memory for feature arrays and clusters; no texture objects */
 
     /* copy clusters to constant memory */
     checkCudaErrors(cudaMemcpyToSymbol(c_clusters, clusters[0],
@@ -216,16 +182,12 @@ extern "C" int // delta -- had problems when return value was of float type
     dim3 grid(num_blocks_perdim, num_blocks_perdim);
     dim3 threads(num_threads_perdim * num_threads_perdim);
 
-    /* execute the kernel */
+    /* execute the kernel (pass original row-major features pointer) */
     kmeansPoint<<<grid, threads>>>(feature_d, nfeatures, npoints, nclusters,
                                    membership_d, clusters_d, block_clusters_d,
-                                   block_deltas_d,
-                                   t_features_obj, features_flipped_d.tex, t_clusters_obj);
+                                   block_deltas_d, features_flipped_d.tex);
 
     checkCudaErrors(cudaThreadSynchronize());
-
-    checkCudaErrors(cudaDestroyTextureObject(t_features_obj));
-    checkCudaErrors(cudaDestroyTextureObject(t_clusters_obj));
 
     /* copy back membership (device to host) */
     cudaMemcpy(membership_new, membership_d, npoints * sizeof(int),

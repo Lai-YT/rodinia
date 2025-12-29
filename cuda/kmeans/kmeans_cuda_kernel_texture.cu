@@ -58,9 +58,7 @@ __global__ void kmeansPoint(float *features, /* in: [npoints*nfeatures] */
                             int nfeatures, int npoints, int nclusters,
                             int *membership, float *clusters,
                             float *block_clusters, int *block_deltas,
-                            cudaTextureObject_t t_features,
-                            cudaTextureObject_t t_features_flipped,
-                            cudaTextureObject_t t_clusters) {
+                            cudaTextureObject_t t_features_flipped) {
 
     // block ID
     const unsigned int block_id = gridDim.x * blockIdx.y + blockIdx.x;
@@ -85,9 +83,8 @@ __global__ void kmeansPoint(float *features, /* in: [npoints*nfeatures] */
             for (j = 0; j < nfeatures; j++) {
                 int addr = point_id +
                            j * npoints; /* appropriate index of data point */
-                float diff = (tex1Dfetch<float>(t_features, addr) -
-                              c_clusters[cluster_base_index +
-                                         j]); /* distance between a data point
+                float diff = (features[addr] -
+                          c_clusters[cluster_base_index + j]); /* distance between a data point
                                                  to cluster centers */
                 ans += diff * diff;           /* sum of squares */
             }
