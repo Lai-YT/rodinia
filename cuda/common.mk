@@ -55,10 +55,10 @@ NVCCFLAGS += -g --device-debug
 endif
 
 %: %.cu
-	$(NVCC) $(CPPFLAGS) $(NVCCFLAGS) $(NVCC_LDLIBS) -o $@ $^
+	$(NVCC) $(KERNEL_DIM) $(CPPFLAGS) $(NVCCFLAGS) $(NVCC_LDLIBS) -o $@ $^
 
 %.o: %.cu
-	$(NVCC) $(CPPFLAGS) $(NVCCFLAGS) -c -o $@ $<
+	$(NVCC) $(KERNEL_DIM) $(CPPFLAGS) $(NVCCFLAGS) -c -o $@ $<
 
 %.ptx: %.cu
-	$(NVCC) $(CPPFLAGS) $(NVCCFLAGS) -ptx -o $@ $<
+	$(NVCC) $(KERNEL_DIM) $(CPPFLAGS) $(NVCCFLAGS) -ptx -o $@ $<
