@@ -1,0 +1,112 @@
+diff --git a/cuda/huffman/pack_kernels.cu b/cuda/huffman/pack_kernels.cu
+index ab86ed8..08469f3 100644
+--- a/cuda/huffman/pack_kernels.cu
++++ b/cuda/huffman/pack_kernels.cu
+@@ -20,7 +20,7 @@
+ #define _PACK_KERNELS_H_
+ #include "parameters.h"
+ 
+-__global__ void pack2(unsigned int *srcData, unsigned int *cindex,
++__global__ void pack2(unsigned int srcData[NUM_BLOCKS][NUM_BLOCK_THREADS], unsigned int *cindex,
+                              unsigned int *cindex2, unsigned int *dstData,
+                              unsigned int original_num_block_elements) {
+     unsigned int tid = blockDim.x * blockIdx.x + threadIdx.x;
+@@ -33,7 +33,7 @@ __global__ void pack2(unsigned int *srcData, unsigned int *cindex,
+     unsigned int pos = cindex2[tid], dword = pos / 32, bit = pos % 32;
+ 
+     unsigned int i, dw, tmp;
+-    dw = srcData[offset]; // load the first dword from srcData[]
++    dw = srcData[tid][0]; // load the first dword from srcData[]
+     tmp = dw >> bit;      // cut off those bits that do not fit into the initial
+                           // location in destData[]
+     atomicOr(&dstData[dword], tmp); // fill up this initial location
+@@ -42,7 +42,7 @@ __global__ void pack2(unsigned int *srcData, unsigned int *cindex,
+         << 32 - bit; // save the remaining bits that were cut off earlier in tmp
+     for (i = 1; i < bitsize / 32;
+          i++) { // from now on, we have exclusive access to destData[]
+-        dw = srcData[offset + i]; // load next dword from srcData[]
++        dw = srcData[offset][i]; // load next dword from srcData[]
+         tmp |= dw >> bit;         // fill up tmp
+         dstData[dword + i] = tmp; // write complete dword to destData[]
+         tmp = dw << 32 - bit; // save the remaining bits in tmp (like before)
+@@ -54,7 +54,7 @@ __global__ void pack2(unsigned int *srcData, unsigned int *cindex,
+     if (bit != 0 || bitsize % 32 != 0)
+         atomicOr(&dstData[dword + i], tmp);
+     if (bitsize % 32 != 0) {
+-        dw = srcData[offset + i];
++        dw = srcData[tid][i];
+         atomicOr(&dstData[dword + i], dw >> bit);
+         atomicOr(&dstData[dword + i + 1], dw << 32 - bit);
+     }
+diff --git a/cuda/huffman/pavle.cu b/cuda/huffman/pavle.cu
+index 3f6ee2d..5e4eaa2 100644
+--- a/cuda/huffman/pavle.cu
++++ b/cuda/huffman/pavle.cu
+@@ -14,6 +14,9 @@
+  *
+  */
+ 
++#define NUM_BLOCKS 1024
++#define NUM_BLOCK_THREADS 256
++
+ #include "comparison_helpers.h"
+ #include "cuda_helpers.h"
+ #include "load_data.h"
+@@ -163,9 +166,9 @@ void runVLCTest(char *file_name, uint num_block_threads, uint num_blocks) {
+     cudaEventRecord(start, 0);
+     for (int i = 0; i < NT; i++) {
+         vlc_encode_kernel_sm64huff<<<grid_size, block_size, sm_size>>>(
+-            d_sourceData, d_codewords, d_codewordlens,
++            (unsigned int (*)[NUM_BLOCK_THREADS])d_sourceData, d_codewords, d_codewordlens,
+ #ifdef TESTING
+-            d_cw32, d_cw32len, d_cw32idx,
++            (unsigned int (*)[NUM_BLOCK_THREADS])d_cw32, (unsigned int (*)[NUM_BLOCK_THREADS])d_cw32len, (unsigned int (*)[NUM_BLOCK_THREADS])d_cw32idx,
+ #endif
+             d_destData, d_cindex); // testedOK2
+     }
+@@ -187,7 +190,7 @@ void runVLCTest(char *file_name, uint num_block_threads, uint num_blocks) {
+     prescanArray(d_cindex2, d_cindex, num_scan_elements);
+ 
+     pack2<<<num_scan_elements / 16, 16>>>(
+-        (unsigned int *)d_destData, d_cindex, d_cindex2,
++        (unsigned int (*)[NUM_BLOCK_THREADS])d_destData, d_cindex, d_cindex2,
+         (unsigned int *)d_destDataPacked, num_elements / num_scan_elements);
+     CUT_CHECK_ERROR("Pack2 Kernel execution failed\n");
+     deallocBlockSums();
+diff --git a/cuda/huffman/vlc_kernel_sm64huff.cu b/cuda/huffman/vlc_kernel_sm64huff.cu
+index f722311..5e1b18f 100644
+--- a/cuda/huffman/vlc_kernel_sm64huff.cu
++++ b/cuda/huffman/vlc_kernel_sm64huff.cu
+@@ -42,11 +42,11 @@
+ 
+ 
+ __global__ void
+-vlc_encode_kernel_sm64huff(unsigned int *data, const unsigned int *gm_codewords,
++vlc_encode_kernel_sm64huff(unsigned int data[NUM_BLOCKS][NUM_BLOCK_THREADS], const unsigned int *gm_codewords,
+                            const unsigned int *gm_codewordlens,
+ #ifdef TESTING
+-                           unsigned int *cw32, unsigned int *cw32len,
+-                           unsigned int *cw32idx,
++                           unsigned int cw32[NUM_BLOCKS][NUM_BLOCK_THREADS], unsigned int cw32len[NUM_BLOCKS][NUM_BLOCK_THREADS],
++                           unsigned int cw32idx[NUM_BLOCKS][NUM_BLOCK_THREADS],
+ #endif
+                            unsigned int *out, unsigned int *outidx) {
+ 
+@@ -70,7 +70,7 @@ vlc_encode_kernel_sm64huff(unsigned int *data, const unsigned int *gm_codewords,
+     /* Load the codewords and the original data*/
+     codewords[k] = gm_codewords[k];
+     codewordlens[k] = gm_codewordlens[k];
+-    val32 = data[kn];
++    val32 = data[blockIdx.x][k];
+     __syncthreads();
+     for (unsigned int i = 0; i < 4; i++) {
+         tmpbyte = (unsigned char)(val32 >> ((3 - i) * 8));
+@@ -81,7 +81,7 @@ vlc_encode_kernel_sm64huff(unsigned int *data, const unsigned int *gm_codewords,
+     }
+ #else
+     unsigned int *as = (unsigned int *)sm;
+-    val32 = data[kn];
++    val32 = data[blockIdx.x][k];
+     for (unsigned int i = 0; i < 4; i++) {
+         tmpbyte = (unsigned char)(val32 >> ((3 - i) * 8));
+         tmpcw32 = gm_codewords[tmpbyte];
